@@ -1,4 +1,5 @@
 package com.flowfreebot
+
 import kotlinx.coroutines.withTimeoutOrNull
 import android.app.Notification
 import android.app.NotificationChannel
@@ -54,6 +55,7 @@ class AutoSolverService : Service() {
     private lateinit var floatingRoot:  View
     private lateinit var tvPlayBtn:     TextView
     private lateinit var tvStatusLbl:   TextView
+    private lateinit var tvGridSizeLbl: TextView
 
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay:  VirtualDisplay?  = null
@@ -67,7 +69,7 @@ class AutoSolverService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var isSolving    = false
 
-    // Vùng lưới game & Số ô do người dùng chọn thủ công
+    // Vùng lưới game & Số ô do người dùng tự chọn
     private var selectedCropRect: Rect? = null
     private var selectedGridSize: Int = 6
 
@@ -158,60 +160,125 @@ class AutoSolverService : Service() {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  UI: FLOATING BUTTON & CROP OVERLAY
+    //  UI: FLOATING BUTTON (WIDGET NỔI)
     // ════════════════════════════════════════════════════════════════════════
 
     private fun showFloatingButton() {
         val ctx = this
-        val container = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(6), dp(6), dp(6), dp(6))
-            setBackgroundColor(Color.parseColor("#DD1e2732"))
+
+        val floatingLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#E61e2732"))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
         }
 
-        val tvDrag = TextView(ctx).apply {
-            text = "· · ·"; textSize = 11f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#a4b0be"))
-            setPadding(dp(20), dp(2), dp(20), dp(2))
+        val buttonsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
         }
 
-        val btnRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-
-        val tvCropBtn = TextView(ctx).apply {
-            text = "🔲 VÙNG"; textSize = 13f; setTypeface(typeface, android.graphics.Typeface.BOLD)
-            gravity = Gravity.CENTER; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#FF9F43"))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+        val btnCrop = Button(this).apply {
+            text = "🔲 VÙNG"
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setBackgroundColor(Color.parseColor("#fa8231"))
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, dp(35), 1f).apply { marginEnd = dp(4) }
             setOnClickListener { showCropUI() }
         }
 
-        tvPlayBtn = TextView(ctx).apply {
-            text = "▶ PLAY"; textSize = 13f; setTypeface(typeface, android.graphics.Typeface.BOLD)
-            gravity = Gravity.CENTER; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#6c5ce7"))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+        tvPlayBtn = Button(this).apply {
+            text = "▶ PLAY"
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setBackgroundColor(Color.parseColor("#6c5ce7"))
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, dp(35), 1f).apply { marginStart = dp(4) }
             setOnClickListener { if (!isSolving) onPlayClicked() }
         }
 
-        val marginParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) }
-        btnRow.addView(tvCropBtn); btnRow.addView(tvPlayBtn, marginParams)
+        buttonsRow.addView(btnCrop)
+        buttonsRow.addView(tvPlayBtn)
 
-        tvStatusLbl = TextView(ctx).apply {
-            text = "Flow Bot 🤖"; textSize = 10f; gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#a4b0be"))
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+        val gridSelectorRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, 0)
         }
 
-        container.addView(tvDrag); container.addView(btnRow); container.addView(tvStatusLbl)
+        val btnSize = dp(28)
+        val btnMinus = Button(ctx).apply {
+            text = "—"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#576574"))
+            setPadding(0,0,0,0)
+            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
+        }
+
+        tvGridSizeLbl = TextView(ctx).apply {
+            text = "${selectedGridSize}x${selectedGridSize}"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(45), LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+
+        val btnPlus = Button(ctx).apply {
+            text = "＋"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#576574"))
+            setPadding(0,0,0,0)
+            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
+        }
+
+        // Logic tăng giảm cập nhật trực tiếp biến toàn cục (Đã sửa lỗi Coroutines)
+        btnMinus.setOnClickListener {
+            if(selectedGridSize > 4) {
+                selectedGridSize--
+                tvGridSizeLbl.text = "${selectedGridSize}x${selectedGridSize}"
+                tvStatusLbl.text = "Flow Bot 🤖"
+            }
+        }
+        btnPlus.setOnClickListener {
+            if(selectedGridSize < 15) {
+                selectedGridSize++
+                tvGridSizeLbl.text = "${selectedGridSize}x${selectedGridSize}"
+                tvStatusLbl.text = "Flow Bot 🤖"
+            }
+        }
+
+        gridSelectorRow.addView(btnMinus)
+        gridSelectorRow.addView(tvGridSizeLbl)
+        gridSelectorRow.addView(btnPlus)
+
+        tvStatusLbl = TextView(this).apply {
+            text = "Flow Bot 🤖"
+            textSize = 9f
+            setTextColor(Color.parseColor("#a4b0be"))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(4)
+            }
+        }
+
+        floatingLayout.addView(buttonsRow)
+        floatingLayout.addView(gridSelectorRow)
+        floatingLayout.addView(tvStatusLbl)
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(160), WindowManager.LayoutParams.WRAP_CONTENT,
             overlayType, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.END; x = dp(16); y = dp(200) }
 
-        floatingRoot = container
+        floatingRoot = floatingLayout
         windowManager.addView(floatingRoot, params)
 
         var initX = 0; var initY = 0; var initTX = 0f; var initTY = 0f; var dragging = false
-        tvDrag.setOnTouchListener { _, event ->
+        floatingLayout.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> { initX = params.x; initY = params.y; initTX = event.rawX; initTY = event.rawY; dragging = false; true }
                 MotionEvent.ACTION_MOVE -> {
@@ -225,18 +292,17 @@ class AutoSolverService : Service() {
         }
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    //  UI: CROP OVERLAY
+    // ════════════════════════════════════════════════════════════════════════
+
     private fun showCropUI() {
         val ctx = this
 
-        // 1. TỰ ĐỘNG BUNG FULL MÀN HÌNH LẦN ĐẦU TIÊN
         if (selectedCropRect == null) {
-            // Game Flow Free luôn là hình vuông. Ta lấy width màn hình làm cạnh hình vuông.
             val boardSize = screenWidth
-            // Căn giữa hình vuông theo chiều dọc màn hình
             val topOffset = (screenHeight - boardSize) / 2
-
             selectedCropRect = Rect(0, topOffset, screenWidth, topOffset + boardSize)
-            selectedGridSize = 6 // Đảm bảo mặc định là 6x6
         }
 
         val cropContainer = FrameLayout(ctx)
@@ -244,75 +310,31 @@ class AutoSolverService : Service() {
         selectedCropRect?.let { cropView.cropRect = RectF(it) }
         cropContainer.addView(cropView)
 
-        // 2. LÀM LẠI THANH BOTTOM BAR CÂN ĐỐI (Chia làm 3 phần bằng nhau 1:1:1)
         val bottomBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setBackgroundColor(Color.parseColor("#EE1e2732"))
             setPadding(dp(12), dp(12), dp(12), dp(12))
-            weightSum = 3f // Chia tổng chiều ngang làm 3 phần
+            weightSum = 2f
         }
 
-        // Nút HỦY (Chiếm 1/3)
         val btnCancel = Button(ctx).apply {
             text = "✖ HỦY"
             textSize = 13f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setBackgroundColor(Color.parseColor("#FF4757"))
             setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginEnd = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginEnd = dp(6) }
             setOnClickListener { windowManager.removeView(cropContainer) }
         }
 
-        // --- CỤM CHỌN SỐ Ô (Chiếm 1/3 ở giữa) ---
-        var tempGrid = selectedGridSize
-        val gridSelector = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
-        }
-
-        // Ép cứng kích thước nút + và - để thành hình vuông đẹp mắt
-        val btnSize = dp(35)
-        val btnMinus = Button(ctx).apply {
-            text = "—"
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#576574"))
-            setPadding(0,0,0,0)
-            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
-        }
-        val tvGrid = TextView(ctx).apply {
-            text = "${tempGrid}x${tempGrid}"
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT).apply {
-                marginStart = dp(8); marginEnd = dp(8)
-            }
-        }
-        val btnPlus = Button(ctx).apply {
-            text = "＋"
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#576574"))
-            setPadding(0,0,0,0)
-            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
-        }
-
-        btnMinus.setOnClickListener { if(tempGrid > 4) { tempGrid--; tvGrid.text = "${tempGrid}x${tempGrid}" } }
-        btnPlus.setOnClickListener { if(tempGrid < 15) { tempGrid++; tvGrid.text = "${tempGrid}x${tempGrid}" } }
-        gridSelector.addView(btnMinus)
-        gridSelector.addView(tvGrid)
-        gridSelector.addView(btnPlus)
-
-        // Nút XONG (Chiếm 1/3)
         val btnConfirm = Button(ctx).apply {
             text = "✔ XONG"
             textSize = 13f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setBackgroundColor(Color.parseColor("#32ff7e"))
             setTextColor(Color.BLACK)
-            layoutParams = LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginStart = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginStart = dp(6) }
             setOnClickListener {
                 val loc = IntArray(2)
                 cropContainer.getLocationOnScreen(loc)
@@ -325,14 +347,12 @@ class AutoSolverService : Service() {
                     cropView.cropRect.right.toInt(),
                     cropView.cropRect.bottom.toInt()
                 )
-                selectedGridSize = tempGrid
                 windowManager.removeView(cropContainer)
-                Toast.makeText(ctx, "Đã lưu lưới ${tempGrid}x${tempGrid}!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "Đã lưu vùng lưới!", Toast.LENGTH_SHORT).show()
             }
         }
 
         bottomBar.addView(btnCancel)
-        bottomBar.addView(gridSelector)
         bottomBar.addView(btnConfirm)
 
         val barParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.BOTTOM }
@@ -370,7 +390,6 @@ class AutoSolverService : Service() {
 
                 fullBitmap = acquireLatestBitmap() ?: throw Exception("Không lấy được ảnh màn hình!")
 
-                // BÙ TRỪ TỌA ĐỘ VÀO PHÚT CHÓT ĐỂ CẮT ẢNH & VUỐT
                 val realRect = Rect(
                     selectedCropRect!!.left + screenOffsetX,
                     selectedCropRect!!.top + screenOffsetY,
@@ -385,15 +404,14 @@ class AutoSolverService : Service() {
 
                 croppedBitmap = Bitmap.createBitmap(fullBitmap, safeLeft, safeTop, safeRight - safeLeft, safeBottom - safeTop)
 
+                // SỬ DỤNG TRỰC TIẾP CON SỐ NGƯỜI DÙNG CHỌN (KHÔNG DÙNG AUTO-DETECT)
                 val rows = selectedGridSize
                 val cols = selectedGridSize
 
-                setFloatStatus("🎨 Quét màu (${rows}×${cols})...")
+                setFloatStatus("🎨 Quét màu (${rows}x${cols})...")
+
                 val board = FlowFreeSolver.scanBitmapToBoard(croppedBitmap, rows, cols)
 
-                // ---------------------------------------------------------
-                // TẠO CHUỖI MA TRẬN X-QUANG ĐỂ XEM BOT ĐANG BỊ "MÙ" THẾ NÀO
-                // ---------------------------------------------------------
                 val matrixStr = java.lang.StringBuilder()
                 for (r in 0 until rows) {
                     for (c in 0 until cols) {
@@ -403,20 +421,18 @@ class AutoSolverService : Service() {
                 }
                 Log.d(TAG, "MA TRẬN BOT THẤY:\n$matrixStr")
 
-                setFloatStatus("🧠 Tìm lời giải DFS...")
+                setFloatStatus("🧠 Tìm đường đi...")
                 val paths: Map<String, List<Cell>> = FlowFreeSolver.solveDFS(board, rows, cols)
                     ?: throw Exception("MA TRẬN BOT NHÌN THẤY LÀ:\n$matrixStr\n(Hãy chụp màn hình lỗi này gửi tôi!)")
 
-                setFloatStatus("✍️ Đang vuốt (${paths.size} màu)...")
+                setFloatStatus("✍️ Đang vuốt...")
 
-                // TRUYỀN realRect VÀO HÀM ĐỂ TỌA ĐỘ VUỐT KHỚP VỚI MÀN HÌNH CHỤP
                 executeGestures(paths, rows, cols, realRect)
 
                 setFloatStatus("✅ Hoàn thành!")
 
             } catch (e: Exception) {
                 setFloatStatus("❌ Lỗi")
-                // Hiển thị ma trận lỗi bằng Toast dài
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@AutoSolverService, e.message, Toast.LENGTH_LONG).show()
                 }
@@ -436,10 +452,8 @@ class AutoSolverService : Service() {
                 FlowFreeSolver.cellToScreenCoord(cell, numRows, numCols, screenWidth, screenHeight, cropRect)
             }
 
-            // Tính toán thời gian dự kiến (200ms/ô)
             val expectedDuration = (pixelPath.size * 200L).coerceAtLeast(400L)
 
-            // LẮP RƠ-LE: Cho phép vuốt tối đa (Thời gian dự kiến + dư ra 3 giây). Quá hạn là tự ngắt!
             withTimeoutOrNull(expectedDuration + 3000L) {
                 suspendCancellableCoroutine<Unit> { cont ->
                     mainHandler.post {
@@ -447,8 +461,6 @@ class AutoSolverService : Service() {
                     }
                 }
             }
-
-            // Nghỉ 1 giây cho mượt mà trước khi vẽ màu tiếp theo
             delay(1000)
         }
     }
