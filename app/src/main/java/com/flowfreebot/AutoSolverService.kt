@@ -227,50 +227,98 @@ class AutoSolverService : Service() {
 
     private fun showCropUI() {
         val ctx = this
+
+        // 1. TỰ ĐỘNG BUNG FULL MÀN HÌNH LẦN ĐẦU TIÊN
+        if (selectedCropRect == null) {
+            // Game Flow Free luôn là hình vuông. Ta lấy width màn hình làm cạnh hình vuông.
+            val boardSize = screenWidth
+            // Căn giữa hình vuông theo chiều dọc màn hình
+            val topOffset = (screenHeight - boardSize) / 2
+
+            selectedCropRect = Rect(0, topOffset, screenWidth, topOffset + boardSize)
+            selectedGridSize = 6 // Đảm bảo mặc định là 6x6
+        }
+
         val cropContainer = FrameLayout(ctx)
         val cropView = CropOverlayView(ctx)
         selectedCropRect?.let { cropView.cropRect = RectF(it) }
         cropContainer.addView(cropView)
 
+        // 2. LÀM LẠI THANH BOTTOM BAR CÂN ĐỐI (Chia làm 3 phần bằng nhau 1:1:1)
         val bottomBar = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
             setBackgroundColor(Color.parseColor("#EE1e2732"))
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            weightSum = 3f // Chia tổng chiều ngang làm 3 phần
         }
 
+        // Nút HỦY (Chiếm 1/3)
         val btnCancel = Button(ctx).apply {
-            text = "✖ Hủy"; setBackgroundColor(Color.parseColor("#FF4757")); setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(8) }
+            text = "✖ HỦY"
+            textSize = 13f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setBackgroundColor(Color.parseColor("#FF4757"))
+            setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginEnd = dp(8) }
             setOnClickListener { windowManager.removeView(cropContainer) }
         }
 
-        // --- CỤM CHỌN SỐ Ô (GRID SIZE) ---
+        // --- CỤM CHỌN SỐ Ô (Chiếm 1/3 ở giữa) ---
         var tempGrid = selectedGridSize
         val gridSelector = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.5f)
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
         }
-        val btnMinus = Button(ctx).apply { text = "-"; setTextColor(Color.WHITE); setBackgroundColor(Color.DKGRAY); setPadding(0,0,0,0) }
-        val tvGrid = TextView(ctx).apply { text = "${tempGrid}x${tempGrid}"; setTextColor(Color.WHITE); textSize = 16f; setPadding(dp(8),0,dp(8),0) }
-        val btnPlus = Button(ctx).apply { text = "+"; setTextColor(Color.WHITE); setBackgroundColor(Color.DKGRAY); setPadding(0,0,0,0) }
+
+        // Ép cứng kích thước nút + và - để thành hình vuông đẹp mắt
+        val btnSize = dp(35)
+        val btnMinus = Button(ctx).apply {
+            text = "—"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#576574"))
+            setPadding(0,0,0,0)
+            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
+        }
+        val tvGrid = TextView(ctx).apply {
+            text = "${tempGrid}x${tempGrid}"
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT).apply {
+                marginStart = dp(8); marginEnd = dp(8)
+            }
+        }
+        val btnPlus = Button(ctx).apply {
+            text = "＋"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#576574"))
+            setPadding(0,0,0,0)
+            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
+        }
 
         btnMinus.setOnClickListener { if(tempGrid > 4) { tempGrid--; tvGrid.text = "${tempGrid}x${tempGrid}" } }
         btnPlus.setOnClickListener { if(tempGrid < 15) { tempGrid++; tvGrid.text = "${tempGrid}x${tempGrid}" } }
-        gridSelector.addView(btnMinus); gridSelector.addView(tvGrid); gridSelector.addView(btnPlus)
+        gridSelector.addView(btnMinus)
+        gridSelector.addView(tvGrid)
+        gridSelector.addView(btnPlus)
 
+        // Nút XONG (Chiếm 1/3)
         val btnConfirm = Button(ctx).apply {
-            text = "✔ Xong"
+            text = "✔ XONG"
+            textSize = 13f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
             setBackgroundColor(Color.parseColor("#32ff7e"))
             setTextColor(Color.BLACK)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) }
+            layoutParams = LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginStart = dp(8) }
             setOnClickListener {
-                // ĐO KHOẢNG CÁCH LỆCH CỦA THANH TRẠNG THÁI
                 val loc = IntArray(2)
                 cropContainer.getLocationOnScreen(loc)
                 screenOffsetX = loc[0]
                 screenOffsetY = loc[1]
 
-                // KHÔNG CỘNG OFFSET VÀO ĐÂY ĐỂ KHUNG KHÔNG BỊ RỚT!
                 selectedCropRect = Rect(
                     cropView.cropRect.left.toInt(),
                     cropView.cropRect.top.toInt(),
@@ -283,7 +331,10 @@ class AutoSolverService : Service() {
             }
         }
 
-        bottomBar.addView(btnCancel); bottomBar.addView(gridSelector); bottomBar.addView(btnConfirm)
+        bottomBar.addView(btnCancel)
+        bottomBar.addView(gridSelector)
+        bottomBar.addView(btnConfirm)
+
         val barParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.BOTTOM }
         cropContainer.addView(bottomBar, barParams)
 
@@ -291,7 +342,6 @@ class AutoSolverService : Service() {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
             overlayType,
-            // ĐÃ BỎ CỜ FLAG_LAYOUT_NO_LIMITS Ở ĐÂY
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
