@@ -1,0 +1,23 @@
+R_DEF: Internal format may change without notice
+local
+color bgDark
+color black
+color cardBg
+color colorAccent
+color colorPrimary
+color colorPrimaryDark
+color danger
+color success
+color textMuted
+color warning
+color white
+id btnStart
+id tvStatus
+layout activity_main
+mipmap ic_launcher
+mipmap ic_launcher_round
+string accessibility_service_description
+string accessibility_service_label
+string app_name
+style Theme.FlowFreeBot
+xml accessibility_service_config

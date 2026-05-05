@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bgDark">#12181f</color>
+    <color name="black">#000000</color>
+    <color name="cardBg">#1e2732</color>
+    <color name="colorAccent">#32ff7e</color>
+    <color name="colorPrimary">#6c5ce7</color>
+    <color name="colorPrimaryDark">#4a3fa0</color>
+    <color name="danger">#ff4757</color>
+    <color name="success">#32ff7e</color>
+    <color name="textMuted">#a4b0be</color>
+    <color name="warning">#fff200</color>
+    <color name="white">#FFFFFF</color>
+    <string name="accessibility_service_description">
+        Cho phép Flow Free Bot tự động vuốt màn hình để giải game.
+        Ứng dụng KHÔNG đọc nội dung, KHÔNG thu thập dữ liệu cá nhân.
+        Chỉ sử dụng tính năng thực hiện cử chỉ (gesture).
+    </string>
+    <string name="accessibility_service_label">Flow Free Bot – Auto Swipe</string>
+    <string name="app_name">Flow Free Bot</string>
+    <style name="Theme.FlowFreeBot" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryVariant">@color/colorPrimaryDark</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="android:windowBackground">@color/bgDark</item>
+        <item name="android:statusBarColor">@color/bgDark</item>
+        <item name="android:navigationBarColor">@color/bgDark</item>
+    </style>
+</resources>
