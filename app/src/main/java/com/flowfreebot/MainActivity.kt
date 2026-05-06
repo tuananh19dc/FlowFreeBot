@@ -1,5 +1,7 @@
 package com.flowfreebot
-
+// Nhớ kéo lên đầu file kiểm tra xem đã có 2 dòng import này chưa:
+import android.view.accessibility.AccessibilityManager
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
@@ -15,6 +17,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
+
+// Tạo Enum để quản lý 3 trạng thái của Accessibility Service
+enum class A11yState { RUNNING, ZOMBIE, STOPPED }
 
 class MainActivity : AppCompatActivity() {
 
@@ -58,10 +63,11 @@ class MainActivity : AppCompatActivity() {
     private val accessibilityLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        if (isAccessibilityEnabled()) {
-            requestScreenCapture()
-        } else {
-            setStatus("❌ Chưa bật Trợ năng. Nhấn START lại.", "#FF4757")
+        val state = getAccessibilityState()
+        when (state) {
+            A11yState.RUNNING -> requestScreenCapture()
+            A11yState.ZOMBIE -> setStatus("❌ Lỗi Zombie: Bạn phải gạt TẮT công tắc đi rồi BẬT LẠI!", "#FF4757")
+            A11yState.STOPPED -> setStatus("❌ Chưa bật Trợ năng. Nhấn START lại.", "#FF4757")
         }
     }
 
@@ -91,18 +97,26 @@ class MainActivity : AppCompatActivity() {
     // ─── Cập nhật UI theo trạng thái hiện tại ──────────────────────────────────
     private fun updateStatusFromState() {
         val hasOverlay = Settings.canDrawOverlays(this)
-        val hasA11y   = isAccessibilityEnabled()
+        val a11yState = getAccessibilityState()
 
         val sb = StringBuilder()
         sb.appendLine(if (hasOverlay) "✅ Quyền Overlay: OK" else "⬜ Quyền Overlay: Chưa cấp")
-        sb.appendLine(if (hasA11y)   "✅ Trợ năng: OK"      else "⬜ Trợ năng: Chưa bật")
 
-        if (hasOverlay && hasA11y) {
+        when (a11yState) {
+            A11yState.RUNNING -> sb.appendLine("✅ Trợ năng: OK")
+            A11yState.ZOMBIE -> sb.appendLine("⚠️ Trợ năng: BỊ KẸT (Cần Tắt/Bật lại)")
+            A11yState.STOPPED -> sb.appendLine("⬜ Trợ năng: Chưa bật")
+        }
+
+        if (hasOverlay && a11yState == A11yState.RUNNING) {
             sb.append("👆 Nhấn START BOT để chụp màn hình & bắt đầu!")
-            setStatus(sb.toString(), "#32ff7e")
+            setStatus(sb.toString(), "#32ff7e") // Xanh lá
+        } else if (a11yState == A11yState.ZOMBIE) {
+            sb.append("👆 Dịch vụ kẹt ngầm. Nhấn START BOT để sửa lỗi!")
+            setStatus(sb.toString(), "#FF4757") // Đỏ
         } else {
-            sb.append("👆 Nhấn START BOT để cấp từng quyền.")
-            setStatus(sb.toString(), "#fff200")
+            sb.append("👆 Nhấn START BOT để cấp quyền.")
+            setStatus(sb.toString(), "#fff200") // Vàng
         }
     }
 
@@ -118,18 +132,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ─── Bước 2: Trợ năng ──────────────────────────────────────────────────────
+    // ─── Bước 2: Trợ năng (Đã tích hợp Check ZOMBIE) ───────────────────────────
     private fun checkAccessibilityThenCapture() {
-        if (!isAccessibilityEnabled()) {
-            setStatus("⏳ Vui lòng BẬT 'Flow Free Bot' trong Trợ năng...", "#fff200")
-            Toast.makeText(
-                this,
-                "Tìm 'Flow Free Bot' → bật lên → quay lại app!",
-                Toast.LENGTH_LONG
-            ).show()
-            accessibilityLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        } else {
-            requestScreenCapture()
+        when (getAccessibilityState()) {
+            A11yState.RUNNING -> requestScreenCapture()
+
+            A11yState.ZOMBIE -> {
+                setStatus("⏳ Đang kẹt Service! Mở cài đặt để Fix...", "#FF4757")
+                Toast.makeText(
+                    this,
+                    "LỖI HỆ THỐNG:\nHãy gạt TẮT 'Flow Free Bot' sau đó BẬT LẠI nhé!",
+                    Toast.LENGTH_LONG
+                ).show()
+                accessibilityLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+
+            A11yState.STOPPED -> {
+                setStatus("⏳ Vui lòng BẬT 'Flow Free Bot' trong Trợ năng...", "#fff200")
+                Toast.makeText(
+                    this,
+                    "Tìm 'Flow Free Bot' → bật lên → quay lại app!",
+                    Toast.LENGTH_LONG
+                ).show()
+                accessibilityLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
         }
     }
 
@@ -159,27 +185,35 @@ class MainActivity : AppCompatActivity() {
         btnStart.isEnabled = false
     }
 
-    // ─── Kiểm tra Accessibility Service có bật chưa ────────────────────────────
-    private fun isAccessibilityEnabled(): Boolean {
-        val serviceName = "$packageName/${FlowBotAccessibilityService::class.java.canonicalName}"
-        return try {
-            val enabled = Settings.Secure.getInt(
-                contentResolver,
-                Settings.Secure.ACCESSIBILITY_ENABLED, 0
-            )
-            if (enabled == 0) return false
+    // ─── Kiểm tra trạng thái Accessibility Service (Có bắt ZOMBIE) ─────────────
+    // ─── Kiểm tra trạng thái Accessibility Service (Bản vá lỗi không nhận diện) ─────────────
+    // ─── Kiểm tra trạng thái bằng AccessibilityManager (Chuẩn API Android) ─────────────
+    private fun getAccessibilityState(): A11yState {
+        var isEnabledInSystem = false
 
-            val services = Settings.Secure.getString(
-                contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-            ) ?: return false
+        try {
+            val am = getSystemService(ACCESSIBILITY_SERVICE) as AccessibilityManager
+            // Lấy danh sách toàn bộ các Accessibility Service ĐANG ĐƯỢC BẬT
+            val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
 
-            TextUtils.SimpleStringSplitter(':').let { splitter ->
-                splitter.setString(services)
-                splitter.any { it.equals(serviceName, ignoreCase = true) }
+            val myPackageName = packageName
+            val myServiceName = FlowBotAccessibilityService::class.java.name
+
+            // Quét xem app của mình có nằm trong danh sách đang bật không
+            isEnabledInSystem = enabledServices.any { info ->
+                info.resolveInfo.serviceInfo.packageName == myPackageName &&
+                        info.resolveInfo.serviceInfo.name == myServiceName
             }
         } catch (e: Exception) {
-            false
+            isEnabledInSystem = false
+        }
+
+        val isInstanceAlive = FlowBotAccessibilityService.isRunning()
+
+        return when {
+            isEnabledInSystem && isInstanceAlive -> A11yState.RUNNING
+            isEnabledInSystem && !isInstanceAlive -> A11yState.ZOMBIE
+            else -> A11yState.STOPPED
         }
     }
 

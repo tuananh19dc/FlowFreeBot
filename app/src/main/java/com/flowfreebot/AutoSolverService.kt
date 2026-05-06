@@ -59,7 +59,7 @@ class AutoSolverService : Service() {
 
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay:  VirtualDisplay?  = null
-    private var imageReader:     ImageReader?      = null
+    private var imageReader:     ImageReader?     = null
 
     private var screenWidth  = 0
     private var screenHeight = 0
@@ -69,17 +69,13 @@ class AutoSolverService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
     private var isSolving    = false
 
-    // Vùng lưới game & Số ô do người dùng tự chọn
+    // Vùng lưới game & Số ô HÀNG / CỘT ĐỘC LẬP
     private var selectedCropRect: Rect? = null
-    private var selectedGridSize: Int = 6
+    private var numRows: Int = 6 // Chiều dọc (Trục Y)
+    private var numCols: Int = 6 // Chiều ngang (Trục X)
 
-    // BIẾN LƯU KHOẢNG CÁCH BÙ TRỪ THANH TRẠNG THÁI
     private var screenOffsetX = 0
     private var screenOffsetY = 0
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  LIFECYCLE
-    // ════════════════════════════════════════════════════════════════════════
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -160,7 +156,7 @@ class AutoSolverService : Service() {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  UI: FLOATING BUTTON (WIDGET NỔI)
+    //  UI: BẢNG ĐIỀU KHIỂN NỔI - TRỤC X x TRỤC Y (CỘT x HÀNG)
     // ════════════════════════════════════════════════════════════════════════
 
     private fun showFloatingButton() {
@@ -168,91 +164,133 @@ class AutoSolverService : Service() {
 
         val floatingLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#E61e2732"))
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setBackgroundColor(Color.parseColor("#E61e2732")) // Nền trong suốt
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
 
+        // --- HÀNG 1: [ VÙNG ] [ PLAY ] [ X ] ---
         val buttonsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
+            weightSum = 10f
         }
 
         val btnCrop = Button(this).apply {
             text = "🔲 VÙNG"
-            textSize = 11f
+            textSize = 10f
             setTextColor(Color.WHITE)
             setTypeface(null, android.graphics.Typeface.BOLD)
             setBackgroundColor(Color.parseColor("#fa8231"))
             setPadding(0, 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(0, dp(35), 1f).apply { marginEnd = dp(4) }
+            layoutParams = LinearLayout.LayoutParams(0, dp(35), 4f).apply { marginEnd = dp(4) }
             setOnClickListener { showCropUI() }
         }
 
         tvPlayBtn = Button(this).apply {
             text = "▶ PLAY"
-            textSize = 11f
+            textSize = 10f
             setTextColor(Color.WHITE)
             setTypeface(null, android.graphics.Typeface.BOLD)
             setBackgroundColor(Color.parseColor("#6c5ce7"))
             setPadding(0, 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(0, dp(35), 1f).apply { marginStart = dp(4) }
+            layoutParams = LinearLayout.LayoutParams(0, dp(35), 4f).apply { marginEnd = dp(4) }
             setOnClickListener { if (!isSolving) onPlayClicked() }
+        }
+
+        val btnClose = Button(this).apply {
+            text = "✖"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#FF4757"))
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, dp(35), 2f)
+            setOnClickListener { stopSelf() }
         }
 
         buttonsRow.addView(btnCrop)
         buttonsRow.addView(tvPlayBtn)
+        buttonsRow.addView(btnClose)
 
+        // --- HÀNG 2: BỘ CHỌN KÍCH THƯỚC ---
         val gridSelectorRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, dp(6), 0, 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            }
         }
 
-        val btnSize = dp(28)
-        val btnMinus = Button(ctx).apply {
-            text = "—"
+        // 1. Nút Outer (❮) - Giảm ĐỒNG THỜI
+        val btnOuterMinus = Button(ctx).apply {
+            text = "❮"
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#576574"))
-            setPadding(0,0,0,0)
-            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
+            setBackgroundColor(Color.parseColor("#2f3640"))
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(dp(26), dp(64)).apply { marginEnd = dp(6) }
         }
 
+        // 2. Cột Stack TRÁI (Điều khiển CỘT - Trục X - Con số bên trái)
+        val colStack = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(64))
+        }
+        val btnColPlus = Button(ctx).apply { text = "＋"; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#576574")); setPadding(0,0,0,0); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { bottomMargin = dp(2) } }
+        val btnColMinus = Button(ctx).apply { text = "−"; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#576574")); setPadding(0,0,0,0); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
+        colStack.addView(btnColPlus)
+        colStack.addView(btnColMinus)
+
+        // 3. Text Center (Định dạng: CỘT x HÀNG)
         tvGridSizeLbl = TextView(ctx).apply {
-            text = "${selectedGridSize}x${selectedGridSize}"
+            text = "${numCols}x${numRows}"
             setTextColor(Color.WHITE)
-            textSize = 13f
+            textSize = 16f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(45), LinearLayout.LayoutParams.MATCH_PARENT)
+            layoutParams = LinearLayout.LayoutParams(dp(46), dp(64))
         }
 
-        val btnPlus = Button(ctx).apply {
-            text = "＋"
+        // 4. Cột Stack PHẢI (Điều khiển HÀNG - Trục Y - Con số bên phải)
+        val rowStack = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(dp(32), dp(64))
+        }
+        val btnRowPlus = Button(ctx).apply { text = "＋"; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#576574")); setPadding(0,0,0,0); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply { bottomMargin = dp(2) } }
+        val btnRowMinus = Button(ctx).apply { text = "−"; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#576574")); setPadding(0,0,0,0); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f) }
+        rowStack.addView(btnRowPlus)
+        rowStack.addView(btnRowMinus)
+
+        // 5. Nút Outer (❯) - Tăng ĐỒNG THỜI
+        val btnOuterPlus = Button(ctx).apply {
+            text = "❯"
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#576574"))
-            setPadding(0,0,0,0)
-            layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
+            setBackgroundColor(Color.parseColor("#2f3640"))
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(dp(26), dp(64)).apply { marginStart = dp(6) }
         }
 
-        // Logic tăng giảm cập nhật trực tiếp biến toàn cục (Đã sửa lỗi Coroutines)
-        btnMinus.setOnClickListener {
-            if(selectedGridSize > 4) {
-                selectedGridSize--
-                tvGridSizeLbl.text = "${selectedGridSize}x${selectedGridSize}"
-                tvStatusLbl.text = "Flow Bot 🤖"
-            }
-        }
-        btnPlus.setOnClickListener {
-            if(selectedGridSize < 15) {
-                selectedGridSize++
-                tvGridSizeLbl.text = "${selectedGridSize}x${selectedGridSize}"
-                tvStatusLbl.text = "Flow Bot 🤖"
-            }
+        // LOGIC SỰ KIỆN CLICK (Hiển thị Cột x Hàng)
+        fun updateSizeLabel() {
+            tvGridSizeLbl.text = "${numCols}x${numRows}"
+            tvStatusLbl.text = "Flow Bot 🤖"
         }
 
-        gridSelectorRow.addView(btnMinus)
+        // Tăng giảm cả cụm (Outer)
+        btnOuterMinus.setOnClickListener { if (numRows > 4 && numCols > 4) { numRows--; numCols--; updateSizeLabel() } }
+        btnOuterPlus.setOnClickListener { if (numRows < 15 && numCols < 15) { numRows++; numCols++; updateSizeLabel() } }
+
+        // Cụm Trái: Tăng giảm Cột (Width)
+        btnColPlus.setOnClickListener { if (numCols < 15) { numCols++; updateSizeLabel() } }
+        btnColMinus.setOnClickListener { if (numCols > 4) { numCols--; updateSizeLabel() } }
+
+        // Cụm Phải: Tăng giảm Hàng (Height)
+        btnRowPlus.setOnClickListener { if (numRows < 15) { numRows++; updateSizeLabel() } }
+        btnRowMinus.setOnClickListener { if (numRows > 4) { numRows--; updateSizeLabel() } }
+
+        gridSelectorRow.addView(btnOuterMinus)
+        gridSelectorRow.addView(colStack)    // Bên TRÁI là CỘT
         gridSelectorRow.addView(tvGridSizeLbl)
-        gridSelectorRow.addView(btnPlus)
+        gridSelectorRow.addView(rowStack)    // Bên PHẢI là HÀNG
+        gridSelectorRow.addView(btnOuterPlus)
 
         tvStatusLbl = TextView(this).apply {
             text = "Flow Bot 🤖"
@@ -260,7 +298,7 @@ class AutoSolverService : Service() {
             setTextColor(Color.parseColor("#a4b0be"))
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(4)
+                topMargin = dp(6)
             }
         }
 
@@ -269,8 +307,10 @@ class AutoSolverService : Service() {
         floatingLayout.addView(tvStatusLbl)
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+
+        // Khung UI chuẩn đẹp
         val params = WindowManager.LayoutParams(
-            dp(160), WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(185), WindowManager.LayoutParams.WRAP_CONTENT,
             overlayType, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.END; x = dp(16); y = dp(200) }
 
@@ -301,7 +341,7 @@ class AutoSolverService : Service() {
 
         if (selectedCropRect == null) {
             val boardSize = screenWidth
-            val topOffset = (screenHeight - boardSize) / 2
+            val topOffset = (screenHeight - boardSize) / 3
             selectedCropRect = Rect(0, topOffset, screenWidth, topOffset + boardSize)
         }
 
@@ -369,7 +409,7 @@ class AutoSolverService : Service() {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  PIPELINE
+    //  PIPELINE THUẬT TOÁN
     // ════════════════════════════════════════════════════════════════════════
 
     private fun onPlayClicked() {
@@ -404,12 +444,11 @@ class AutoSolverService : Service() {
 
                 croppedBitmap = Bitmap.createBitmap(fullBitmap, safeLeft, safeTop, safeRight - safeLeft, safeBottom - safeTop)
 
-                // SỬ DỤNG TRỰC TIẾP CON SỐ NGƯỜI DÙNG CHỌN (KHÔNG DÙNG AUTO-DETECT)
-                val rows = selectedGridSize
-                val cols = selectedGridSize
+                // Lõi thuật toán vẫn nhận chính xác numRows và numCols
+                val rows = numRows
+                val cols = numCols
 
-                setFloatStatus("🎨 Quét màu (${rows}x${cols})...")
-
+                setFloatStatus("🎨 Quét màu (${cols}x${rows})...")
                 val board = FlowFreeSolver.scanBitmapToBoard(croppedBitmap, rows, cols)
 
                 val matrixStr = java.lang.StringBuilder()
@@ -423,12 +462,10 @@ class AutoSolverService : Service() {
 
                 setFloatStatus("🧠 Tìm đường đi...")
                 val paths: Map<String, List<Cell>> = FlowFreeSolver.solveDFS(board, rows, cols)
-                    ?: throw Exception("MA TRẬN BOT NHÌN THẤY LÀ:\n$matrixStr\n(Hãy chụp màn hình lỗi này gửi tôi!)")
+                    ?: throw Exception("MA TRẬN LỖI: Vui lòng kéo vùng chọn khớp viền game!")
 
                 setFloatStatus("✍️ Đang vuốt...")
-
                 executeGestures(paths, rows, cols, realRect)
-
                 setFloatStatus("✅ Hoàn thành!")
 
             } catch (e: Exception) {

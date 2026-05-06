@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Flow Free Bot</string>
+    <string name="app_name">TA19DC DOT</string>
 
     <!-- Tên hiển thị trong danh sách Trợ năng -->
-    <string name="accessibility_service_label">Flow Free Bot – Auto Swipe</string>
+    <string name="accessibility_service_label">TA19DC DOT</string>
 
     <!-- Mô tả hiển thị khi người dùng bật Accessibility Service -->
     <string name="accessibility_service_description">
-        Cho phép Flow Free Bot tự động vuốt màn hình để giải game.
+        Cho phép TA19DC DOT tự động vuốt màn hình để giải game.
         Ứng dụng KHÔNG đọc nội dung, KHÔNG thu thập dữ liệu cá nhân.
         Chỉ sử dụng tính năng thực hiện cử chỉ (gesture).
     </string>
